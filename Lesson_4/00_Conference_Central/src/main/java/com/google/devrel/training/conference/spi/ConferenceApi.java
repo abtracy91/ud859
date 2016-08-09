@@ -1,6 +1,7 @@
 package com.google.devrel.training.conference.spi;
 
 import static com.google.devrel.training.conference.service.OfyService.ofy;
+import static com.google.devrel.training.conference.service.OfyService.factory;
 
 import com.google.api.server.spi.config.Api;
 import com.google.api.server.spi.config.ApiMethod;
@@ -11,7 +12,12 @@ import com.google.devrel.training.conference.Constants;
 import com.google.devrel.training.conference.domain.Profile;
 import com.google.devrel.training.conference.form.ProfileForm;
 import com.google.devrel.training.conference.form.ProfileForm.TeeShirtSize;
+import com.google.devrel.training.conference.domain.Conference;
+import com.google.devrel.training.conference.form.ConferenceForm;
+import com.google.devrel.training.conference.form.ConferenceQueryForm;
 import com.googlecode.objectify.Key;
+import com.googlecode.objectify.cmd.Query;
+import java.util.List;
 
 /**
  * Defines conference APIs.
@@ -122,4 +128,95 @@ public class ConferenceApi {
         Profile profile = (Profile) ofy().load().key(key).now();
         return profile;
     }
+    
+    /**
+     * Creates a new Conference object and stores it to the datastore.
+     *
+     * @param user A user who invokes this method, null when the user is not signed in.
+     * @param conferenceForm A ConferenceForm object representing user's inputs.
+     * @return A newly created Conference Object.
+     * @throws UnauthorizedException when the user is not signed in.
+     */
+    @ApiMethod(name = "createConference", path = "conference", httpMethod = HttpMethod.POST)
+    public Conference createConference(final User user, final ConferenceForm conferenceForm)
+        throws UnauthorizedException {
+        if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+
+        // TODO (Lesson 4)
+        // Get the userId of the logged in User
+        String userId = user.getUserId();
+
+        // TODO (Lesson 4)
+        // Get the key for the User's Profile
+        Key<Profile> profileKey = Key.create(Profile.class, userId);
+
+        // TODO (Lesson 4)
+        // Allocate a key for the conference -- let App Engine allocate the ID
+        // Don't forget to include the parent Profile in the allocated ID
+        final Key<Conference> conferenceKey = factory().allocateId(profileKey, Conference.class);
+
+        // TODO (Lesson 4)
+        // Get the Conference Id from the Key
+        //final long conferenceId = 
+        final long conferenceId = conferenceKey.getId();
+
+        // TODO (Lesson 4)
+        // Get the existing Profile entity for the current user if there is one
+        // Otherwise create a new Profile entity with default values
+        Profile profile = (Profile) ofy().load().key(profileKey).now();
+        if (profile == null) {
+        	// Populate the displayName and teeShirtSize with default values
+            // if not sent in the request
+            String displayName = extractDefaultDisplayNameFromEmail(user.getEmail());
+            TeeShirtSize teeShirtSize = TeeShirtSize.NOT_SPECIFIED;
+            // Now create a new Profile entity
+            profile = new Profile(userId, displayName, user.getEmail(), teeShirtSize);
+        }
+
+        // TODO (Lesson 4)
+        // Create a new Conference Entity, specifying the user's Profile entity
+        // as the parent of the conference
+        //Conference conference = (Conference) ofy().load().key(conferenceKey).now();
+        Conference conference = new Conference(conferenceId, userId, conferenceForm);
+
+        // TODO (Lesson 4)
+        // Save Conference and Profile Entities
+        ofy().save().entities(profile, conference).now();
+         
+
+         return conference;
+         }
+    
+    @ApiMethod(name = "queryConferences", path = "queryConferences", httpMethod = HttpMethod.POST)
+    public List<Conference> queryConferences(ConferenceQueryForm conferenceQueryForm) {
+    	// Query<Conference> query = ofy().load().type(Conference.class).order("name");
+    	
+    	// return query.list();
+    	return conferenceQueryForm.getQuery().list();
+    }
+    
+    @ApiMethod(name = "getConferencesCreated", path = "getConferencesCreated", httpMethod = HttpMethod.POST)
+    public List<Conference> getConferencesCreated(final User user) throws UnauthorizedException {
+    	if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+        String userId = user.getUserId();
+    	
+    	Key<Profile> profileKey = Key.create(Profile.class, userId);
+    	Query<Conference> query = ofy().load().type(Conference.class).ancestor(profileKey).order("name");
+    	
+    	return query.list();
+    }
+    
+    public List<Conference> filterPlayground () {
+    	Query<Conference> query = ofy().load().type(Conference.class).order("name").
+    			filter("city =", "London");
+    	query = query.filter("topics =", "Medical Innovations");
+    	query = query.filter("month =", 6);
+    	
+    	return query.list();
+    }
+
 }
